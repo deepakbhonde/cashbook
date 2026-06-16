@@ -2031,27 +2031,25 @@
         // ============================================
         // URL PARAMETER HANDLER (for fresh opens)
         // ============================================
-        function handleURLParams() {
-            const params = new URLSearchParams(window.location.search);
-            const reminderId = params.get('reminder');
-            if (reminderId) {
-                // Clean URL
-                window.history.replaceState({}, document.title, window.location.pathname);
-                // Navigate and show reminder
-                setTimeout(() => {
-                    showView('reminderView');
-                    setTimeout(() => {
-                        const reminder = reminders.find(r => r.id === reminderId);
-                        if (reminder) {
-                            showReminderDetail(reminderId);
-                        } else {
-                            renderReminders();
-                        }
-                    }, 300);
-                }, 100);
-            }
+        
+function handleURLParams() {
+  const params = new URLSearchParams(window.location.search);
+  const reminderId = params.get('reminder');
+  if (reminderId) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setTimeout(() => {
+      showView('reminderView');
+      setTimeout(() => {
+        const reminder = reminders.find(r => r.id === reminderId);
+        if (reminder) {
+          showReminderDetail(reminderId);
+        } else {
+          renderReminders();
         }
-
+      }, 300);
+    }, 100);
+  }
+}
         // ==================== EVENT LISTENERS ====================
         document.getElementById('continueBtn')?.addEventListener('click', () => {
             const name = document.getElementById('userName').value.trim();
