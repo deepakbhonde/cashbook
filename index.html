@@ -1956,50 +1956,39 @@
 
         // ===== UPDATED scheduleNotification with Service Worker messaging =====
         async function scheduleNotification(r) {
-            if (isExpired(r)) return;
-            const granted = await requestNotifPermission();
-            if (!granted) return;
+  if (isExpired(r)) return;
+  const granted = await requestNotifPermission();
+  if (!granted) return;
 
-            const delay = new Date(r.date + 'T' + r.time).getTime() - Date.now();
-            if (delay <= 0) return;
+  const delay = new Date(r.date + 'T' + r.time).getTime() - Date.now();
+  if (delay <= 0) return;
 
-            if (_notifTimers[r.id]) clearTimeout(_notifTimers[r.id]);
+  if (_notifTimers[r.id]) clearTimeout(_notifTimers[r.id]);
 
-            _notifTimers[r.id] = setTimeout(async () => {
-                try {
-                    // Try Service Worker first (works in background)
-                    const registration = await navigator.serviceWorker.ready;
-                    if (registration.active) {
-                        registration.active.postMessage({
-                            type: 'SHOW_NOTIFICATION',
-                            payload: {
-                                title: '⏰ ' + r.title,
-                                body: r.details || 'Cash Book Reminder',
-                                tag: 'reminder-' + r.id
-                            }
-                        });
-                    } else {
-                        // Fallback: direct notification
-                        if (Notification.permission === 'granted') {
-                            new Notification('⏰ ' + r.title, {
-                                body: r.details || 'Cash Book Reminder',
-                                icon: './icon-192.png',
-                                tag: 'reminder-' + r.id
-                            });
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Notification error:', e);
-                    if (Notification.permission === 'granted') {
-                        new Notification('⏰ ' + r.title, {
-                            body: r.details || 'Cash Book Reminder',
-                            icon: './icon-192.png',
-                            tag: 'reminder-' + r.id
-                        });
-                    }
-                }
-            }, delay);
-        }
+  _notifTimers[r.id] = setTimeout(async () => {
+    try {
+      // Try to get service worker registration
+      const registration = await navigator.serviceWorker.ready;
+      // Show notification via Service Worker (works in background)
+      registration.showNotification('⏰ ' + r.title, {
+        body: r.details || 'Cash Book Reminder',
+        icon: './icon-192.png',
+        badge: './icon-192.png',
+        tag: 'reminder-' + r.id,
+        requireInteraction: true,
+      });
+    } catch (swError) {
+      // Fallback: direct notification (works when app is open)
+      if (Notification.permission === 'granted') {
+        new Notification('⏰ ' + r.title, {
+          body: r.details || 'Cash Book Reminder',
+          icon: './icon-192.png',
+          tag: 'reminder-' + r.id,
+        });
+      }
+    }
+  }, delay);
+}
 
         function scheduleAllPendingReminders() {
             reminders.forEach(r => { if (!isExpired(r)) scheduleNotification(r); });
