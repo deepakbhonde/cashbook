@@ -1,73 +1,72 @@
-const CACHE_NAME = 'cashbook-v3';
-const urlsToCache = [
-  '/cashbook/index.html',
-  '/cashbook/manifest.json',
-  '/cashbook/icon-192.png',
-  '/cashbook/icon-512.png'
+const CACHE_NAME = 'cashbook-v1';
+
+const ASSETS = [
+  './',
+  './index.html',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
-// Install event - cache all files
-self.addEventListener('install', event => {
+// Install
+self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(async cache => {
-      // Cache all URLs
-      await cache.addAll(urlsToCache);
-      // Also cache the root (important for PWA)
-      await cache.add('/cashbook/');
-      return cache;
-    })
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(ASSETS))
   );
+
   self.skipWaiting();
 });
 
-// Fetch event - network first, then cache, with offline fallback
-self.addEventListener('fetch', event => {
-  const requestUrl = new URL(event.request.url);
-  
-  // Handle navigation requests (HTML pages)
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match('/cashbook/index.html');
-      })
-    );
-    return;
-  }
-  
-  // For other assets (CSS, JS, icons) - cache first
-  event.respondWith(
-    caches.match(event.request).then(response => {
-      if (response) {
-        return response;
-      }
-      return fetch(event.request).then(response => {
-        // Cache new files as they come
-        if (response && response.status === 200) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(event.request, responseClone);
-          });
-        }
-        return response;
-      }).catch(() => {
-        // Return a simple offline response for non-navigation requests
-        if (event.request.destination === 'image') {
-          return new Response(null, { status: 404, statusText: 'Not Found' });
-        }
-        return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
-      });
-    })
+// Activate
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(
+        keys
+          .filter(key => key !== CACHE_NAME)
+          .map(key => caches.delete(key))
+      )
+    )
   );
+
+  self.clients.claim();
 });
 
-// Activate event - clean old caches
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys => {
-      return Promise.all(
-        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-      );
-    })
+// Fetch
+self.addEventListener('fetch', (event) => {
+
+  if (event.request.method !== 'GET') return;
+
+  event.respondWith(
+    caches.match(event.request)
+      .then(cached => {
+
+        if (cached) {
+          return cached;
+        }
+
+        return fetch(event.request)
+          .then(response => {
+
+            if (
+              response &&
+              response.status === 200 &&
+              response.type === 'basic'
+            ) {
+              const clone = response.clone();
+
+              caches.open(CACHE_NAME)
+                .then(cache => cache.put(event.request, clone));
+            }
+
+            return response;
+          });
+      })
+      .catch(() => {
+        if (event.request.mode === 'navigate') {
+          return caches.match('./index.html');
+        }
+      })
   );
-  self.clients.claim();
 });
