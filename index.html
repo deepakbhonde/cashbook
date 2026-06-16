@@ -1956,20 +1956,30 @@
 
         // ===== UPDATED scheduleNotification with Service Worker messaging =====
         async function scheduleNotification(r) {
+  // Don't schedule expired reminders
   if (isExpired(r)) return;
+
+  const now = Date.now();
+  const reminderTime = new Date(r.date + 'T' + r.time).getTime();
+  let delay = reminderTime - now;
+
+  // 🔥 FIX: if delay is zero or negative, the reminder is already past – skip it
+  if (delay <= 0) {
+    console.warn('Reminder is in the past, not scheduling:', r);
+    return;
+  }
+
+  // Ask for permission (if not already granted)
   const granted = await requestNotifPermission();
   if (!granted) return;
 
-  const delay = new Date(r.date + 'T' + r.time).getTime() - Date.now();
-  if (delay <= 0) return;
-
+  // Clear any existing timer for this reminder
   if (_notifTimers[r.id]) clearTimeout(_notifTimers[r.id]);
 
+  // Schedule the notification
   _notifTimers[r.id] = setTimeout(async () => {
     try {
-      // Try to get service worker registration
       const registration = await navigator.serviceWorker.ready;
-      // Show notification via Service Worker (works in background)
       registration.showNotification('⏰ ' + r.title, {
         body: r.details || 'Cash Book Reminder',
         icon: './icon-192.png',
@@ -1978,7 +1988,7 @@
         requireInteraction: true,
       });
     } catch (swError) {
-      // Fallback: direct notification (works when app is open)
+      // Fallback to direct notification
       if (Notification.permission === 'granted') {
         new Notification('⏰ ' + r.title, {
           body: r.details || 'Cash Book Reminder',
