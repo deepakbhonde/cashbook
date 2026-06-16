@@ -1071,7 +1071,7 @@
     <script>
         /* ============================================
            SIMPLE CASH BOOK - COMPLETE PWA
-           Version: 5.1 | Custom Notification Banner
+           Version: 5.2 | Notification Click → Specific Reminder
            ============================================ */
 
         // ==================== DATA STORAGE ====================
@@ -1934,6 +1934,7 @@
             });
         }
 
+        // ===== GLOBAL showReminderDetail (accessible from SW message) =====
         function showReminderDetail(id) {
             const r = reminders.find(x => x.id == id);
             if (!r) return;
@@ -1953,6 +1954,7 @@
             document.getElementById('reminderDetailModal').style.display = 'flex';
         }
 
+        // ===== UPDATED scheduleNotification with Service Worker messaging =====
         async function scheduleNotification(r) {
             if (isExpired(r)) return;
             const granted = await requestNotifPermission();
@@ -1965,28 +1967,89 @@
 
             _notifTimers[r.id] = setTimeout(async () => {
                 try {
-                    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-                        const reg = await navigator.serviceWorker.ready;
-                        reg.showNotification('⏰ ' + r.title, {
-                            body: r.details || 'Cash Book Reminder',
-                            icon: './icon-192.png',
-                            badge: './icon-192.png',
-                            tag: 'reminder-' + r.id,
-                            requireInteraction: true
+                    // Try Service Worker first (works in background)
+                    const registration = await navigator.serviceWorker.ready;
+                    if (registration.active) {
+                        registration.active.postMessage({
+                            type: 'SHOW_NOTIFICATION',
+                            payload: {
+                                title: '⏰ ' + r.title,
+                                body: r.details || 'Cash Book Reminder',
+                                tag: 'reminder-' + r.id
+                            }
                         });
                     } else {
+                        // Fallback: direct notification
+                        if (Notification.permission === 'granted') {
+                            new Notification('⏰ ' + r.title, {
+                                body: r.details || 'Cash Book Reminder',
+                                icon: './icon-192.png',
+                                tag: 'reminder-' + r.id
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Notification error:', e);
+                    if (Notification.permission === 'granted') {
                         new Notification('⏰ ' + r.title, {
                             body: r.details || 'Cash Book Reminder',
                             icon: './icon-192.png',
                             tag: 'reminder-' + r.id
                         });
                     }
-                } catch (_) {}
+                }
             }, delay);
         }
 
         function scheduleAllPendingReminders() {
             reminders.forEach(r => { if (!isExpired(r)) scheduleNotification(r); });
+        }
+
+        // ============================================
+        // SERVICE WORKER MESSAGE HANDLER
+        // ============================================
+        if (navigator.serviceWorker) {
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                const data = event.data;
+                if (data && data.type === 'OPEN_REMINDER') {
+                    const reminderId = data.payload.reminderId;
+                    // Navigate to reminder view first
+                    showView('reminderView');
+                    // Then find and show the specific reminder
+                    setTimeout(() => {
+                        const reminder = reminders.find(r => r.id === reminderId);
+                        if (reminder) {
+                            showReminderDetail(reminderId);
+                        } else {
+                            renderReminders();
+                        }
+                    }, 300);
+                }
+            });
+        }
+
+        // ============================================
+        // URL PARAMETER HANDLER (for fresh opens)
+        // ============================================
+        function handleURLParams() {
+            const params = new URLSearchParams(window.location.search);
+            const reminderId = params.get('reminder');
+            if (reminderId) {
+                // Clean URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+                // Navigate and show reminder
+                setTimeout(() => {
+                    showView('reminderView');
+                    setTimeout(() => {
+                        const reminder = reminders.find(r => r.id === reminderId);
+                        if (reminder) {
+                            showReminderDetail(reminderId);
+                        } else {
+                            renderReminders();
+                        }
+                    }, 300);
+                }, 100);
+            }
         }
 
         // ==================== EVENT LISTENERS ====================
@@ -2054,25 +2117,21 @@
 
         // ==================== REMINDER BUTTON HANDLER (with permission banner) ====================
         document.getElementById('reminderBtn')?.addEventListener('click', async () => {
-            // Check notification permission status
             const perm = 'Notification' in window ? Notification.permission : 'default';
 
             if (perm === 'granted') {
-                // Already granted — go directly to reminders
                 renderReminders();
                 showView('reminderView');
                 return;
             }
 
             if (perm === 'denied') {
-                // Blocked — show a toast and still go to reminders (but notifications won't work)
                 showToast('🔕 Notifications are blocked. Please enable from browser settings.');
                 renderReminders();
                 showView('reminderView');
                 return;
             }
 
-            // 'default' — show the custom permission banner
             showNotificationBanner();
         });
 
@@ -2082,12 +2141,10 @@
             const granted = await requestNotifPermission();
             if (granted) {
                 showToast('✅ Notifications enabled!');
-                // Re-schedule all pending reminders with the new permission
                 scheduleAllPendingReminders();
             } else {
                 showToast('⚠️ Notification permission not granted.');
             }
-            // Navigate to reminders view regardless
             renderReminders();
             showView('reminderView');
         });
@@ -2244,7 +2301,6 @@
             return null;
         }
 
-        // Override renderDetailsView with filter support
         const _origRenderDetails = renderDetailsView;
         renderDetailsView = function() {
             _origRenderDetails();
@@ -2316,7 +2372,6 @@
             updateFilterBadgeV2();
         };
 
-        // Filter buttons
         document.querySelectorAll('.fbtn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const f = btn.dataset.filter;
@@ -2406,6 +2461,9 @@
             // Schedule all pending reminders (but don't auto-request permission)
             scheduleAllPendingReminders();
 
+            // Handle URL params (for notification click when app was closed)
+            handleURLParams();
+
             if (userName) {
                 showView('dashboardView');
                 navigationStack = ['dashboardView'];
@@ -2417,7 +2475,7 @@
 
         initApp();
 
-        // ==================== REMINDER ERROR HANDLING (legacy compat) ====================
+        // ==================== REMINDER ERROR HANDLING ====================
         document.addEventListener('DOMContentLoaded', function() {
             const saveBtn = document.getElementById('saveReminderBtn');
             if (saveBtn) {
