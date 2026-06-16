@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cashbook-v1';
+const CACHE_NAME = 'cashbook-v2';
 
 const ASSETS = [
   './',
@@ -8,7 +8,7 @@ const ASSETS = [
   './icon-512.png'
 ];
 
-// Install
+/* INSTALL */
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -18,8 +18,9 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate
+/* ACTIVATE */
 self.addEventListener('activate', (event) => {
+
   event.waitUntil(
     caches.keys().then(keys =>
       Promise.all(
@@ -33,7 +34,7 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch
+/* FETCH */
 self.addEventListener('fetch', (event) => {
 
   if (event.request.method !== 'GET') return;
@@ -42,9 +43,7 @@ self.addEventListener('fetch', (event) => {
     caches.match(event.request)
       .then(cached => {
 
-        if (cached) {
-          return cached;
-        }
+        if (cached) return cached;
 
         return fetch(event.request)
           .then(response => {
@@ -54,6 +53,7 @@ self.addEventListener('fetch', (event) => {
               response.status === 200 &&
               response.type === 'basic'
             ) {
+
               const clone = response.clone();
 
               caches.open(CACHE_NAME)
@@ -61,12 +61,80 @@ self.addEventListener('fetch', (event) => {
             }
 
             return response;
+
           });
       })
       .catch(() => {
+
         if (event.request.mode === 'navigate') {
           return caches.match('./index.html');
         }
+
       })
   );
+
+});
+
+/* SHOW NOTIFICATION */
+self.addEventListener('message', async (event) => {
+
+  if (!event.data) return;
+
+  if (event.data.type === 'SHOW_NOTIFICATION') {
+
+    const payload = event.data.payload || {};
+
+    self.registration.showNotification(
+      payload.title || 'Reminder',
+      {
+        body: payload.body || '',
+        icon: './icon-192.png',
+        badge: './icon-192.png',
+        tag: payload.id || 'cashbook-reminder',
+        requireInteraction: true,
+        data: payload
+      }
+    );
+
+  }
+
+});
+
+/* NOTIFICATION CLICK */
+self.addEventListener('notificationclick', (event) => {
+
+  event.notification.close();
+
+  const reminderData = event.notification.data || {};
+
+  event.waitUntil(
+
+    clients.matchAll({
+      type: 'window',
+      includeUncontrolled: true
+    }).then(clientList => {
+
+      for (const client of clientList) {
+
+        client.focus();
+
+        client.postMessage({
+          type: 'OPEN_REMINDER',
+          reminderId: reminderData.id
+        });
+
+        return;
+      }
+
+      return clients.openWindow('./');
+
+    })
+
+  );
+
+});
+
+/* NOTIFICATION CLOSE */
+self.addEventListener('notificationclose', (event) => {
+  console.log('Reminder dismissed');
 });
