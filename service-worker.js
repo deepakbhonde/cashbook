@@ -1,9 +1,9 @@
 const CACHE_NAME = 'cashbook-v3';
 const urlsToCache = [
-  '/tools/index.html',
-  '/tools/manifest.json',
-  '/tools/icon-192.png',
-  '/tools/icon-512.png'
+  '/cashbook/index.html',
+  '/cashbook/manifest.json',
+  '/cashbook/icon-192.png',
+  '/cashbook/icon-512.png'
 ];
 
 // Install event - cache all files
@@ -13,7 +13,7 @@ self.addEventListener('install', event => {
       // Cache all URLs
       await cache.addAll(urlsToCache);
       // Also cache the root (important for PWA)
-      await cache.add('/tools/');
+      await cache.add('/cashbook/');
       return cache;
     })
   );
@@ -28,7 +28,7 @@ self.addEventListener('fetch', event => {
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() => {
-        return caches.match('/tools/index.html');
+        return caches.match('/cashbook/index.html');
       })
     );
     return;
