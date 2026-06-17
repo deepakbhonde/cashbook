@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cashbook-v2';  // Version bump to force update
+const CACHE_NAME = 'cashbook-v3'; // bumped: forces cache refresh
 
 const ASSETS = [
   './',
@@ -8,16 +8,21 @@ const ASSETS = [
   './icon-512.png'
 ];
 
-// Install
+// ============================================
+// INSTALL – cache all assets
+// ============================================
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(ASSETS))
+      .catch(err => console.warn('[SW] Cache addAll partial failure:', err))
   );
   self.skipWaiting();
 });
 
-// Activate
+// ============================================
+// ACTIVATE – delete old caches
+// ============================================
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then(keys =>
@@ -31,7 +36,9 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch
+// ============================================
+// FETCH – cache-first strategy
+// ============================================
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   event.respondWith(
@@ -56,28 +63,36 @@ self.addEventListener('fetch', (event) => {
 });
 
 // ============================================
-// NOTIFICATION CLICK HANDLER – opens specific reminder
+// NOTIFICATION CLICK – open specific reminder
+// FIX 1: Use data.reminderId (not just tag string parsing)
+// FIX 2: postMessage to existing tab (avoids page reload)
+//         openWindow with URL param only for new tab
 // ============================================
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  // Extract reminder ID from tag
-  const reminderId = event.notification.tag.replace('reminder-', '');
+  // Prefer data.reminderId set in scheduleNotification; fallback to tag
+  const reminderId =
+    (event.notification.data && event.notification.data.reminderId)
+      ? event.notification.data.reminderId
+      : event.notification.tag.replace('reminder-', '');
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
-        // If a window/tab is already open, focus it and pass reminder ID via URL
-        for (const client of clientList) {
-          if (client.url && 'focus' in client) {
-            client.focus();
-            // Use URL hash or query param to pass the reminder ID
-            client.navigate(`/?reminder=${reminderId}`);
-            return client;
-          }
+        if (clientList.length > 0) {
+          // App tab already open → focus + postMessage (no reload!)
+          // index.html's 'message' listener handles 'OPEN_REMINDER'
+          const client = clientList[0];
+          client.focus();
+          client.postMessage({
+            type: 'OPEN_REMINDER',
+            payload: { reminderId }
+          });
+          return;
         }
-        // Otherwise open a new window with the reminder ID
+        // No open tab → open new window; handleURLParams() in index.html picks it up
         return clients.openWindow(`/?reminder=${reminderId}`);
       })
-  );
-});
+  )
+})
