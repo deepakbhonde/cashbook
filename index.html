@@ -2120,21 +2120,12 @@ body.dark-mode .rmd-title { color: var(--ink); }
             const fileName = `CashBook_Backup_${new Date().toISOString().slice(0,10)}.json`;
             const file = new File([blob], fileName, { type: 'application/json' });
 
-            // 1. ALWAYS download the file first
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = fileName;
-            a.click();
-            URL.revokeObjectURL(a.href);
-            showToast('📥 Backup downloaded');
-
-            // 2. THEN trigger the native share sheet for the same file (best-effort)
-            // FIX: previously this ran as an either/or fallback BEFORE the download,
-            // so share only fired when download never happened. Now both always run,
-            // in the order requested — download completes, then share triggers.
-            // NOTE: no artificial delay here — navigator.share() needs to run within
-            // the original user-gesture's "transient activation" window, and waiting
-            // even ~1s risks the browser silently refusing to open the share sheet.
+            // 1. Trigger the native share sheet FIRST.
+            // FIX: navigator.share() needs "fresh" transient user-activation from the
+            // click. Calling a.click() to download BEFORE share() consumes that
+            // activation, so share() then fails with "Permission denied". Doing share()
+            // first (while activation is still fresh) avoids this — the download below
+            // doesn't need fresh activation, so it still runs reliably either way.
             try {
                 if (!window.isSecureContext) {
                     // Web Share API only works over HTTPS (or localhost). Testing the file
@@ -2159,6 +2150,16 @@ body.dark-mode .rmd-title { color: var(--ink); }
                     showToast('⚠️ Share failed: ' + err.message);
                 }
             }
+
+            // 2. Download the file regardless of what happened with share above.
+            // This doesn't need fresh user-activation the way share() does, so it
+            // still works reliably even after the share attempt.
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            showToast('📥 Backup downloaded');
         }
 
         async function restoreBackup() {
