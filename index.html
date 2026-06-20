@@ -2120,46 +2120,44 @@ body.dark-mode .rmd-title { color: var(--ink); }
             const fileName = `CashBook_Backup_${new Date().toISOString().slice(0,10)}.json`;
             const file = new File([blob], fileName, { type: 'application/json' });
 
-            // 1. Trigger the native share sheet FIRST.
-            // FIX: navigator.share() needs "fresh" transient user-activation from the
-            // click. Calling a.click() to download BEFORE share() consumes that
-            // activation, so share() then fails with "Permission denied". Doing share()
-            // first (while activation is still fresh) avoids this — the download below
-            // doesn't need fresh activation, so it still runs reliably either way.
-            try {
-                if (!window.isSecureContext) {
-                    // Web Share API only works over HTTPS (or localhost). Testing the file
-                    // directly from Downloads (content:// / file://) is NOT a secure context,
-                    // so share is unavailable here — this is expected, not a bug.
-                    // Once hosted on your real HTTPS domain / installed as TWA, it will work.
-                    showToast('⚠️ Share needs HTTPS — works once hosted online / installed as app');
-                } else if (!navigator.share) {
-                    showToast('⚠️ Share not supported on this browser');
-                } else if (navigator.canShare && !navigator.canShare({ files: [file] })) {
-                    showToast('⚠️ This browser can\'t share JSON files');
-                } else {
-                    await navigator.share({
-                        title: 'Cash Book Backup',
-                        text: 'Cash Book Backup File',
-                        files: [file]
-                    });
-                }
-            } catch (err) {
-                if (err.name !== 'AbortError') {
-                    // Real failure (not just the user closing the share sheet) — show it
-                    showToast('⚠️ Share failed: ' + err.message);
+            // 1. Trigger the native share sheet FIRST (if we're actually on a real
+            // hosted page — http/https). FIX: testing the file via "Open with Chrome"
+            // from Downloads loads it as a content:// page. Chrome reports
+            // isSecureContext:true and canShare:true there, but the OS FileProvider
+            // still refuses the actual share with NotAllowedError — confirmed via
+            // testing. So we skip straight to download in that case instead of
+            // showing a confusing permission-denied error.
+            const isRealWebOrigin = location.protocol === 'http:' || location.protocol === 'https:';
+
+            if (isRealWebOrigin) {
+                try {
+                    if (!navigator.share) {
+                        showToast('⚠️ Share not supported on this browser');
+                    } else if (navigator.canShare && !navigator.canShare({ files: [file] })) {
+                        showToast('⚠️ This browser can\'t share JSON files');
+                    } else {
+                        await navigator.share({
+                            title: 'Cash Book Backup',
+                            text: 'Cash Book Backup File',
+                            files: [file]
+                        });
+                    }
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        // Real failure (not just the user closing the share sheet) — show it
+                        showToast('⚠️ Share failed: ' + err.message);
+                    }
                 }
             }
 
-            // 2. Download the file regardless of what happened with share above.
-            // This doesn't need fresh user-activation the way share() does, so it
-            // still works reliably even after the share attempt.
+            // 2. Always download the file too (works regardless of share outcome,
+            // and is the only option at all when not on a real http/https origin).
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             a.download = fileName;
             a.click();
             URL.revokeObjectURL(a.href);
-            showToast('📥 Backup downloaded');
+            showToast(isRealWebOrigin ? '📥 Backup downloaded' : '📥 Backup downloaded (Share needs hosting online)');
         }
 
         async function restoreBackup() {
