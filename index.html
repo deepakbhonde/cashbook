@@ -45,12 +45,12 @@ body {
 
 /* ============================================ HEADER */
 .header {
-    padding: 8px 0 18px; position: relative;
+    padding: 44px 0 18px; position: relative;
     display: flex; align-items: center; justify-content: center;
 }
 .header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
 .back-btn {
-    position: absolute; left: 0; top: 0;
+    position: absolute; left: 0; top: 36px;
     background: var(--card); border: none;
     font-size: 20px; width: 42px; height: 42px;
     border-radius: var(--r-full);
@@ -62,7 +62,8 @@ body {
 
 .top-right-buttons {
     position: fixed; top: 8px; right: 16px;
-    display: flex; gap: 6px; z-index: 1000;
+    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; z-index: 1000;
+    max-width: 220px;
 }
 .top-icon-btn {
     background: var(--card); border: none;
@@ -316,13 +317,35 @@ label {
 .lang-btn:active { background: var(--surface); transform: scale(0.95); }
 
 /* ============================================ TRANSACTION LIST */
+.details-sticky-head {
+    position: sticky; top: 0; z-index: 40;
+    background: var(--surface); margin: 0 -16px; padding: 0 16px;
+}
+body.dark-mode .details-sticky-head { background: var(--surface); }
+
 .txn-list {
-    margin-top: 10px; max-height: 520px; overflow-y: auto;
+    margin-top: 10px; height: calc(100vh - 430px); min-height: 220px;
+    overflow-y: auto;
     display: flex; flex-direction: column; gap: 8px; padding-right: 2px;
 }
 .txn-list::-webkit-scrollbar { width: 3px; }
 .txn-list::-webkit-scrollbar-track { background: transparent; }
 .txn-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+.list-total-foot {
+    position: sticky; bottom: 0; z-index: 40;
+    display: flex; justify-content: space-around; align-items: center;
+    margin: 10px -16px 0; padding: 14px 16px;
+    font-weight: 700; font-size: 14px; color: var(--ink);
+    background: var(--card); border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 16px rgba(13,31,45,0.06);
+}
+.list-total-foot .ltf-pair { display: flex; align-items: center; gap: 6px; }
+.list-total-foot #listTotalInLabel,
+.list-total-foot #listTotalOutLabel { color: var(--muted); font-weight: 600; font-size: 12px; }
+.list-total-foot #listTotalIn  { color: var(--green-deep); }
+.list-total-foot #listTotalOut { color: var(--coral-deep); }
+body.dark-mode .list-total-foot { background: var(--card); color: var(--ink); }
 
 .txn-item {
     background: var(--card); border-radius: var(--r-md);
@@ -666,24 +689,6 @@ body.dark-mode .field-input:focus { background: #161B22; }
 body.dark-mode .mode-seg { background: #0D1117; }
 body.dark-mode .mode-seg .mode-btn.active { background: var(--card); }
 
-/* Quick reason chips */
-.reason-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: -6px 0 14px; }
-.rchip {
-    background: var(--surface); border: 1.5px solid var(--border);
-    color: var(--muted); font-size: 11px; font-weight: 700;
-    padding: 5px 12px; border-radius: 999px; cursor: pointer;
-    transition: all 0.12s ease; font-family: 'Space Grotesk', sans-serif;
-}
-.rchip:active { transform: scale(0.92); }
-.rchip.rc-active,
-#paymentInView .rchip.rc-active {
-    background: rgba(0,200,150,0.1); border-color: var(--green); color: var(--green-deep);
-}
-#paymentOutView .rchip.rc-active {
-    background: rgba(255,80,71,0.1); border-color: var(--coral); color: var(--coral-deep);
-}
-body.dark-mode .rchip { background: var(--card); border-color: var(--border); color: var(--muted); }
-
 /* --- STICKY SAVE BAR --- */
 .sticky-bar {
     position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
@@ -848,7 +853,7 @@ body.dark-mode .rmd-title { color: var(--ink); }
                     <div class="et-amount-zone" id="inAmountZone">
                         <div class="et-amount-row">
                             <span class="et-rupee">₹</span>
-                            <span class="et-num" id="inAmountDisplay">0.00</span>
+                            <span class="et-num" id="inAmountDisplay" style="opacity:0.3;">0</span>
                             <span class="et-cursor"></span>
                         </div>
                         <!-- Ghost input — invisible, receives keyboard on tap -->
@@ -867,7 +872,7 @@ body.dark-mode .rmd-title { color: var(--ink); }
                 <div class="entry-body">
                     <div class="field-wrap">
                         <input type="text" id="inName" class="field-input" placeholder=" " autocomplete="off" />
-                        <label class="field-label" id="inNameLabel">👤 Name</label>
+                        <label class="field-label" id="inNameLabel">📌 Enter Title</label>
                     </div>
                     <div class="two-col">
                         <div class="field-wrap">
@@ -876,20 +881,12 @@ body.dark-mode .rmd-title { color: var(--ink); }
                         </div>
                         <div class="mode-seg" id="inModeGroup">
                             <button type="button" class="mode-btn active" data-mode="Cash">💵 Cash</button>
-                            <button type="button" class="mode-btn" data-mode="Online">⚡ UPI</button>
+                            <button type="button" class="mode-btn" data-mode="Online">⚡ Online</button>
                         </div>
                     </div>
                     <div class="field-wrap">
                         <input type="text" id="inReason" class="field-input" placeholder=" " autocomplete="off" />
                         <label class="field-label" id="inReasonLabel">💬 Reason (optional)</label>
-                    </div>
-                    <div class="reason-chips">
-                        <button class="rchip" data-for="in" data-r="Salary">Salary</button>
-                        <button class="rchip" data-for="in" data-r="Business">Business</button>
-                        <button class="rchip" data-for="in" data-r="Loan Return">Loan Return</button>
-                        <button class="rchip" data-for="in" data-r="Rent">Rent</button>
-                        <button class="rchip" data-for="in" data-r="Gift">Gift</button>
-                        <button class="rchip" data-for="in" data-r="Other">Other</button>
                     </div>
                 </div>
             </div>
@@ -915,7 +912,7 @@ body.dark-mode .rmd-title { color: var(--ink); }
                     <div class="et-amount-zone" id="outAmountZone">
                         <div class="et-amount-row">
                             <span class="et-rupee" style="color:#FF8A80;">₹</span>
-                            <span class="et-num" id="outAmountDisplay">0.00</span>
+                            <span class="et-num" id="outAmountDisplay" style="opacity:0.3;">0</span>
                             <span class="et-cursor" style="background:var(--coral);"></span>
                         </div>
                         <input type="number" class="ghost-input" id="outAmount" step="0.01" min="0.01" placeholder="0" />
@@ -932,7 +929,7 @@ body.dark-mode .rmd-title { color: var(--ink); }
                 <div class="entry-body">
                     <div class="field-wrap">
                         <input type="text" id="outName" class="field-input" placeholder=" " autocomplete="off" />
-                        <label class="field-label" id="outNameLabel">👤 Name</label>
+                        <label class="field-label" id="outNameLabel">📌 Enter Title</label>
                     </div>
                     <div class="two-col">
                         <div class="field-wrap">
@@ -941,20 +938,12 @@ body.dark-mode .rmd-title { color: var(--ink); }
                         </div>
                         <div class="mode-seg" id="outModeGroup">
                             <button type="button" class="mode-btn active" data-mode="Cash">💵 Cash</button>
-                            <button type="button" class="mode-btn" data-mode="Online">⚡ UPI</button>
+                            <button type="button" class="mode-btn" data-mode="Online">⚡ Online</button>
                         </div>
                     </div>
                     <div class="field-wrap">
                         <input type="text" id="outReason" class="field-input" placeholder=" " autocomplete="off" />
                         <label class="field-label" id="outReasonLabel">💬 Reason (optional)</label>
-                    </div>
-                    <div class="reason-chips">
-                        <button class="rchip" data-for="out" data-r="Rent">Rent</button>
-                        <button class="rchip" data-for="out" data-r="Food">Food</button>
-                        <button class="rchip" data-for="out" data-r="Bills">Bills</button>
-                        <button class="rchip" data-for="out" data-r="EMI">EMI</button>
-                        <button class="rchip" data-for="out" data-r="Shopping">Shopping</button>
-                        <button class="rchip" data-for="out" data-r="Other">Other</button>
                     </div>
                 </div>
             </div>
@@ -970,40 +959,41 @@ body.dark-mode .rmd-title { color: var(--ink); }
 
         <!-- DETAILS VIEW -->
         <div id="detailsView" class="view">
-            <div class="summary-card">
-                <div class="indicator-row">
-                    <span class="indicator-in">🟢 <span id="indicatorInText">Payment In</span></span>
-                    <span class="indicator-out">🔴 <span id="indicatorOutText">Payment Out</span></span>
+            <div class="details-sticky-head">
+                <div class="summary-card">
+                    <div class="indicator-row">
+                        <span class="indicator-in">🟢 <span id="indicatorInText">Payment In</span></span>
+                        <span class="indicator-out">🔴 <span id="indicatorOutText">Payment Out</span></span>
+                    </div>
+                    <div id="availableBalanceLabel" style="font-weight: 500; font-size: 14px; color: #666;">Available Balance</div>
+                    <div class="balance-number" id="balanceAmount">₹0</div>
+                    <div class="total-row">
+                        <span id="totalInLabel">Total In</span>
+                        <span id="totalInSpan">₹0</span>
+                    </div>
+                    <div class="total-row">
+                        <span id="totalOutLabel">Total Out</span>
+                        <span id="totalOutSpan">₹0</span>
+                    </div>
                 </div>
-                <div id="availableBalanceLabel" style="font-weight: 500; font-size: 14px; color: #666;">Available Balance</div>
-                <div class="balance-number" id="balanceAmount">₹0</div>
-                <div class="total-row">
-                    <span id="totalInLabel">Total In</span>
-                    <span id="totalInSpan">₹0</span>
+
+                <div class="flex-row">
+                    <input type="text" id="searchInput" placeholder="🔍 Search by name or reason" style="margin-bottom:0;flex:1;" />
+                    <button class="btn-secondary" id="filterBtn">Filter</button>
+                    <button class="btn-secondary" id="backupBtn">Backup</button>
+                    <button class="btn-secondary" id="restoreBtn">Restore</button>
                 </div>
-                <div class="total-row">
-                    <span id="totalOutLabel">Total Out</span>
-                    <span id="totalOutSpan">₹0</span>
-                </div>
+
+                <div id="activeFilterBadge" style="display:none;margin-bottom:0;"></div>
             </div>
 
-            <div class="flex-row">
-                <input type="text" id="searchInput" placeholder="🔍 Search by name or reason" style="margin-bottom:0;flex:1;" />
-                <button class="btn-secondary" id="filterBtn">Filter</button>
-                <button class="btn-secondary" id="backupBtn">Backup</button>
-                <button class="btn-secondary" id="restoreBtn">Restore</button>
-            </div>
-
-            <div id="activeFilterBadge" style="display:none;margin-bottom:10px;"></div>
             <div id="txnList" class="txn-list">
                 <div class="empty-state">✨ No transactions yet</div>
             </div>
 
-            <div class="total-row" style="margin-top:18px;border-top:1px solid #eee;padding-top:16px;">
-                <span id="listTotalInLabel">Total In</span>
-                <span id="listTotalIn">₹0</span>
-                <span id="listTotalOutLabel">Total Out</span>
-                <span id="listTotalOut">₹0</span>
+            <div class="list-total-foot">
+                <span class="ltf-pair"><span id="listTotalInLabel">Total In</span> <span id="listTotalIn">₹0</span></span>
+                <span class="ltf-pair"><span id="listTotalOutLabel">Total Out</span> <span id="listTotalOut">₹0</span></span>
             </div>
         </div>
     </div>
@@ -1181,6 +1171,7 @@ body.dark-mode .rmd-title { color: var(--ink); }
             en: {
                 langMsg: "Please Select Your Language",
                 nameLabel: "Enter your name",
+                entryTitleLabel: "Enter Title",
                 continue: "Continue →",
                 welcome: "Welcome",
                 seeDetails: "See Details",
@@ -1191,7 +1182,7 @@ body.dark-mode .rmd-title { color: var(--ink); }
                 deleteConfirm: "Delete this transaction?",
                 deleted: "Transaction deleted",
                 saved: "saved",
-                nameRequired: "Name is required",
+                nameRequired: "Title is required",
                 amountPositive: "Amount must be greater than 0",
                 dateInvalid: "Please select a valid date",
                 exportSuccess: "Exported successfully",
@@ -1205,7 +1196,7 @@ body.dark-mode .rmd-title { color: var(--ink); }
                 close: "Close",
                 delete: "Delete",
                 cancel: "Cancel",
-                searchPlaceholder: "🔍 Search by name or reason",
+                searchPlaceholder: "🔍 Search by title or reason",
                 availableBalance: "Available Balance",
                 totalIn: "Total In",
                 totalOut: "Total Out",
@@ -1236,17 +1227,18 @@ body.dark-mode .rmd-title { color: var(--ink); }
             hi: {
                 langMsg: "कृपया अपनी भाषा चुनें",
                 nameLabel: "अपना नाम दर्ज करें",
+                entryTitleLabel: "शीर्षक दर्ज करें",
                 continue: "जारी रखें →",
                 welcome: "स्वागत है",
                 seeDetails: "विवरण देखें",
                 paymentIn: "भुगतान प्राप्त",
-                paymentOut: "भुगतान भेजा",
+                paymentOut: "भुगतान दिया",
                 saveIn: "भुगतान प्राप्त सहेजें",
-                saveOut: "भुगतान भेजा सहेजें",
+                saveOut: "भुगतान दिया सहेजें",
                 deleteConfirm: "यह लेन-देन हटाएं?",
                 deleted: "लेन-देन हटा दिया गया",
                 saved: "सहेजा गया",
-                nameRequired: "नाम आवश्यक है",
+                nameRequired: "शीर्षक आवश्यक है",
                 amountPositive: "राशि 0 से अधिक होनी चाहिए",
                 dateInvalid: "कृपया वैध तारीख चुनें",
                 exportSuccess: "निर्यात किया गया",
@@ -1254,16 +1246,16 @@ body.dark-mode .rmd-title { color: var(--ink); }
                 importSuccess: "आयात सफल",
                 invalidJSON: "अमान्य JSON फ़ाइल",
                 backupCreated: "बैकअप बनाया गया",
-                restoreMerge: "बैकअप पुनर्स्थापित करें (मौजूदा के साथ मर्ज)?",
+                restoreMerge: "बैकअप पुनर्स्थापित करें (मौजूदा रिकॉर्ड के साथ मिलाएं)?",
                 restored: "पुनर्स्थापित किया गया",
                 invalidBackup: "अमान्य बैकअप फ़ाइल",
                 close: "बंद करें",
                 delete: "हटाएं",
                 cancel: "रद्द करें",
-                searchPlaceholder: "🔍 नाम या कारण से खोजें",
+                searchPlaceholder: "🔍 शीर्षक या कारण से खोजें",
                 availableBalance: "उपलब्ध शेष",
                 totalIn: "कुल प्राप्त",
-                totalOut: "कुल भेजा",
+                totalOut: "कुल भुगतान",
                 transactions: "लेन-देन",
                 noTransactions: "✨ कोई लेन-देन नहीं",
                 noMatches: "📭 कोई मिलान नहीं",
@@ -1276,13 +1268,13 @@ body.dark-mode .rmd-title { color: var(--ink); }
                 addAnother: "दूसरी प्रविष्टि बनाएं",
                 back: "वापस",
                 paymentInTitle: "💰 भुगतान प्राप्त",
-                paymentOutTitle: "💸 भुगतान भेजा",
+                paymentOutTitle: "💸 भुगतान दिया",
                 indicatorIn: "भुगतान प्राप्त",
-                indicatorOut: "भुगतान भेजा",
+                indicatorOut: "भुगतान दिया",
                 language: "भाषा",
                 simpleCashBook: "सिंपल कैश बुक",
                 share: "साझा करें",
-                rateUs: "रेट करें",
+                rateUs: "हमें रेट करें",
                 exportBtn: "निर्यात",
                 importBtn: "आयात",
                 backupBtn: "बैकअप",
@@ -1291,17 +1283,18 @@ body.dark-mode .rmd-title { color: var(--ink); }
             mr: {
                 langMsg: "कृपया आपली भाषा निवडा",
                 nameLabel: "आपले नाव प्रविष्ट करा",
+                entryTitleLabel: "शीर्षक प्रविष्ट करा",
                 continue: "पुढे जा →",
                 welcome: "स्वागत आहे",
                 seeDetails: "तपशील पहा",
                 paymentIn: "पेमेंट प्राप्त",
-                paymentOut: "पेमेंट पाठवा",
+                paymentOut: "पेमेंट दिले",
                 saveIn: "पेमेंट प्राप्त जतन करा",
-                saveOut: "पेमेंट पाठवा जतन करा",
+                saveOut: "दिलेले पेमेंट जतन करा",
                 deleteConfirm: "हा व्यवहार हटवायचा?",
                 deleted: "व्यवहार हटविला",
                 saved: "जतन केले",
-                nameRequired: "नाव आवश्यक आहे",
+                nameRequired: "शीर्षक आवश्यक आहे",
                 amountPositive: "रक्कम 0 पेक्षा जास्त असावी",
                 dateInvalid: "कृपया वैध तारीख निवडा",
                 exportSuccess: "निर्यात केले",
@@ -1315,10 +1308,10 @@ body.dark-mode .rmd-title { color: var(--ink); }
                 close: "बंद करा",
                 delete: "हटवा",
                 cancel: "रद्द करा",
-                searchPlaceholder: "🔍 नाव किंवा कारणाने शोधा",
+                searchPlaceholder: "🔍 शीर्षक किंवा कारणाने शोधा",
                 availableBalance: "उपलब्ध शिल्लक",
                 totalIn: "एकूण प्राप्त",
-                totalOut: "एकूण पाठवा",
+                totalOut: "एकूण दिले",
                 transactions: "व्यवहार",
                 noTransactions: "✨ कोणतेही व्यवहार नाहीत",
                 noMatches: "📭 कोणतीही जुळणी नाही",
@@ -1331,13 +1324,13 @@ body.dark-mode .rmd-title { color: var(--ink); }
                 addAnother: "दुसरी प्रविष्टी तयार करा",
                 back: "मागे",
                 paymentInTitle: "💰 पेमेंट प्राप्त",
-                paymentOutTitle: "💸 पेमेंट पाठवा",
+                paymentOutTitle: "💸 पेमेंट दिले",
                 indicatorIn: "पेमेंट प्राप्त",
-                indicatorOut: "पेमेंट पाठवा",
+                indicatorOut: "पेमेंट दिले",
                 language: "भाषा",
                 simpleCashBook: "सिंपल कॅश बुक",
                 share: "शेअर करा",
-                rateUs: "रेट करा",
+                rateUs: "आम्हाला रेट करा",
                 exportBtn: "निर्यात",
                 importBtn: "आयात",
                 backupBtn: "बॅकअप",
@@ -1468,13 +1461,13 @@ body.dark-mode .rmd-title { color: var(--ink); }
             document.getElementById('dashPaymentOut').innerText = t('paymentOut');
             document.getElementById('paymentInTitle').innerHTML = t('paymentInTitle');
             document.getElementById('inDateLabel').innerText = t('date');
-            document.getElementById('inNameLabel').innerText = '👤 ' + t('nameLabel');
+            document.getElementById('inNameLabel').innerText = '📌 ' + t('entryTitleLabel');
             document.getElementById('inReasonLabel').innerText = '💬 ' + t('reason');
             const saveInLabel = document.getElementById('saveInBtnLabel');
             if (saveInLabel) saveInLabel.innerText = t('saveIn');
             document.getElementById('paymentOutTitle').innerHTML = t('paymentOutTitle');
             document.getElementById('outDateLabel').innerText = t('date');
-            document.getElementById('outNameLabel').innerText = '👤 ' + t('nameLabel');
+            document.getElementById('outNameLabel').innerText = '📌 ' + t('entryTitleLabel');
             document.getElementById('outReasonLabel').innerText = '💬 ' + t('reason');
             const saveOutLabel = document.getElementById('saveOutBtnLabel');
             if (saveOutLabel) saveOutLabel.innerText = t('saveOut');
@@ -1663,20 +1656,20 @@ body.dark-mode .rmd-title { color: var(--ink); }
                             document.getElementById('inAmount').value = '';
                             document.getElementById('inReason').value = '';
                             document.getElementById('inDate').value = getTodayISO();
-                            document.getElementById('inAmountDisplay').textContent = '0.00';
+                            document.getElementById('inAmountDisplay').textContent = '0';
+                            document.getElementById('inAmountDisplay').style.opacity = '0.3';
                             const inAmt = document.getElementById('saveInBtnAmt');
                             if (inAmt) inAmt.textContent = '₹0.00';
-                            document.querySelectorAll('.rchip[data-for="in"]').forEach(c => c.classList.remove('rc-active'));
                             document.getElementById('inName').focus();
                         } else {
                             document.getElementById('outName').value = '';
                             document.getElementById('outAmount').value = '';
                             document.getElementById('outReason').value = '';
                             document.getElementById('outDate').value = getTodayISO();
-                            document.getElementById('outAmountDisplay').textContent = '0.00';
+                            document.getElementById('outAmountDisplay').textContent = '0';
+                            document.getElementById('outAmountDisplay').style.opacity = '0.3';
                             const outAmt = document.getElementById('saveOutBtnAmt');
                             if (outAmt) outAmt.textContent = '₹0.00';
-                            document.querySelectorAll('.rchip[data-for="out"]').forEach(c => c.classList.remove('rc-active'));
                             document.getElementById('outName').focus();
                         }
                     } else {
@@ -2532,7 +2525,7 @@ function handleURLParams() {
                 if (!input || !disp || !screen) return;
 
                 const fmt = (v) => {
-                    if (!v || isNaN(v)) return '0.00';
+                    if (!v || isNaN(v)) return '';
                     const n = parseFloat(v);
                     const parts = n.toFixed(2).split('.');
                     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -2541,8 +2534,14 @@ function handleURLParams() {
 
                 input.addEventListener('input', () => {
                     const formatted = fmt(input.value);
-                    disp.textContent = formatted;
-                    if (stickyAmt) stickyAmt.textContent = '₹' + formatted;
+                    if (formatted === '') {
+                        disp.textContent = '0';
+                        disp.style.opacity = '0.3';
+                    } else {
+                        disp.textContent = formatted;
+                        disp.style.opacity = '1';
+                    }
+                    if (stickyAmt) stickyAmt.textContent = '₹' + (formatted || '0.00');
                 });
                 input.addEventListener('focus', () => screen.classList.add('as-focused'));
                 input.addEventListener('blur',  () => screen.classList.remove('as-focused'));
@@ -2580,24 +2579,7 @@ function handleURLParams() {
             });
         }
 
-        // ==================== QUICK REASON CHIPS ====================
-        function setupReasonChips() {
-            document.querySelectorAll('.rchip').forEach(chip => {
-                chip.addEventListener('click', () => {
-                    const prefix = chip.dataset.for;
-                    const reason = chip.dataset.r;
-                    const input = document.getElementById(prefix + 'Reason');
-                    if (input) {
-                        input.value = reason;
-                        input.dispatchEvent(new Event('input')); // trigger floating label
-                    }
-                    // Highlight active chip
-                    document.querySelectorAll(`.rchip[data-for="${prefix}"]`)
-                        .forEach(c => c.classList.remove('rc-active'));
-                    chip.classList.add('rc-active');
-                });
-            });
-        }
+
 
         // ==================== DASHBOARD HERO UPDATE ====================
         function updateDashboardHero() {
@@ -2639,7 +2621,6 @@ function handleURLParams() {
             setDefaultDates();
             setupAmountScreens();     // Wire up amount calculator screens (ghost input)
             setupQuickChips();        // Quick amount preset chips (₹100, ₹500...)
-            setupReasonChips();       // Quick reason chips (Salary, Food...)
             updateDashboardHero();    // Show balance + date in hero card
 
             // Schedule all pending reminders (but don't auto-request permission)
