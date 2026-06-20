@@ -1801,6 +1801,7 @@ body.dark-mode .rmd-title { color: var(--ink); }
 
             transactions.push(transaction);
             saveAllData();
+            if(typeof updateDashboardHero==='function'){updateDashboardHero();}
 
             if (showSuccess) {
                 showSuccessPopup(t('entrySaved'), (action) => {
@@ -2051,6 +2052,7 @@ body.dark-mode .rmd-title { color: var(--ink); }
                 if (confirmed) {
                     transactions = transactions.filter(t => t.id !== transaction.id);
                     saveAllData();
+            if(typeof updateDashboardHero==='function'){updateDashboardHero();}
                     showMiniCard(t('deleted'));
                     closeModal();
                     if (document.getElementById('detailsView').classList.contains('active-view')) {
@@ -2087,6 +2089,7 @@ body.dark-mode .rmd-title { color: var(--ink); }
                         if (confirmed) {
                             transactions = importedData;
                             saveAllData();
+            if(typeof updateDashboardHero==='function'){updateDashboardHero();}
                             showToast(t('importSuccess'));
                             if (document.getElementById('detailsView').classList.contains('active-view')) {
                                 renderDetailsView();
@@ -2102,21 +2105,57 @@ body.dark-mode .rmd-title { color: var(--ink); }
             input.click();
         }
 
-        function backupAllData() {
+        async function backupAllData() {
+
             const backupData = {
                 userName: userName,
                 transactions: transactions,
-                reminders: reminders,  // FIX: reminders were missing from backup
+                reminders: reminders,
                 backupDate: new Date().toISOString().slice(0, 10),
                 version: 2
             };
-            const dataStr = JSON.stringify(backupData, null, 2);
-            const blob = new Blob([dataStr], { type: 'application/json' });
+
+            const json = JSON.stringify(backupData, null, 2);
+
+            const blob = new Blob([json], {
+                type: 'application/json'
+            });
+
+            const file = new File(
+                [blob],
+                `CashBook_Backup_${new Date().toISOString().slice(0,10)}.json`,
+                {
+                    type: 'application/json'
+                }
+            );
+
+            try {
+
+                if (
+                    navigator.canShare &&
+                    navigator.canShare({ files: [file] })
+                ) {
+
+                    await navigator.share({
+                        title: 'Cash Book Backup',
+                        text: 'Cash Book Backup File',
+                        files: [file]
+                    });
+
+                    showToast('Backup shared successfully');
+                    return;
+                }
+
+            } catch (err) {
+                console.log(err);
+            }
+
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `CashBook_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+            a.download = file.name;
             a.click();
             URL.revokeObjectURL(a.href);
+
             showToast(t('backupCreated'));
         }
 
@@ -2161,6 +2200,7 @@ body.dark-mode .rmd-title { color: var(--ink); }
                             updateUILanguage();
                         }
                         saveAllData();
+            if(typeof updateDashboardHero==='function'){updateDashboardHero();}
                         showToast(`${t('restored')}: ${addedCount} new ${t('transactions')}`);
                         if (document.getElementById('detailsView').classList.contains('active-view')) {
                             renderDetailsView();
@@ -2437,6 +2477,7 @@ function handleURLParams() {
             }
             userName = name;
             saveAllData();
+            if(typeof updateDashboardHero==='function'){updateDashboardHero();}
             updateUILanguage();
             showView('dashboardView');
         });
@@ -2692,6 +2733,7 @@ function handleURLParams() {
             if (v) {
                 userName = v;
                 saveAllData();
+            if(typeof updateDashboardHero==='function'){updateDashboardHero();}
                 updateUILanguage();
             }
             document.getElementById('editNameModal').style.display = 'none';
