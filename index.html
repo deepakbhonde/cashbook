@@ -945,6 +945,11 @@ body.dark-mode .rmd-title { color: var(--ink); }
         <div id="reminderView" class="view">
             <button class="btn-primary" id="addReminderOpenBtn" style="margin-bottom:14px;">➕ Add Reminder</button>
 
+            <div id="bgReliabilityTip" style="display:none;background:#FFF8E1;border:1px solid #F5D78E;border-radius:var(--r-md);padding:10px 12px;margin-bottom:14px;font-size:12px;color:#6B5300;line-height:1.4;position:relative;">
+                <span style="padding-right:20px;display:block;">💡 For alerts to arrive on time even when the app is closed, turn off battery optimization for this app in your phone's Settings → Apps → Battery → Unrestricted.</span>
+                <span id="dismissBgTip" style="position:absolute;top:8px;right:10px;cursor:pointer;font-weight:700;">✕</span>
+            </div>
+
             <div class="rem-filter-row" id="remFilterRow">
                 <button class="rfchip active" data-filter="today">Today</button>
                 <button class="rfchip" data-filter="tomorrow">Tomorrow</button>
@@ -2379,6 +2384,7 @@ body.dark-mode .rmd-title { color: var(--ink); }
         // ===== UPDATED scheduleNotification with Service Worker messaging =====
         async function scheduleNotification(r) {
           if (isExpired(r)) return;
+          if (r.notified) return; // already fired — don't double-schedule
           const granted = await requestNotifPermission();
           if (!granted) return;
 
@@ -2392,36 +2398,65 @@ body.dark-mode .rmd-title { color: var(--ink); }
           if (_notifTimers[r.id]) clearTimeout(_notifTimers[r.id]);
 
           _notifTimers[r.id] = setTimeout(async () => {
-            try {
-              // Try to get service worker registration
-              const registration = await navigator.serviceWorker.ready;
-              // Show notification via Service Worker (works in background)
-              registration.showNotification('⏰ ' + r.title, {
-                body: r.details || 'Cash Book Reminder',
-                icon: './icon-192.png',
-                badge: './icon-192.png',
-                tag: 'reminder-' + r.id,
-                requireInteraction: true,
-                data: { reminderId: r.id }  // FIX: SW needs this to open specific reminder
-              });
-            } catch (swError) {
-              // Fallback: direct notification (works when app is open)
-              if (Notification.permission === 'granted') {
-                new Notification('⏰ ' + r.title, {
-                  body: r.details || 'Cash Book Reminder',
-                  icon: './icon-192.png',
-                  tag: 'reminder-' + r.id,
-                });
-              }
-            }
+            await fireReminderNotification(r);
           }, delay);
         }
 
+        // ==================== FIRE A REMINDER NOTIFICATION ====================
+        // Shared by the setTimeout-based scheduler AND the catch-up checker below.
+        // Always marks the reminder as notified so it never fires twice.
+        async function fireReminderNotification(r) {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                registration.showNotification('⏰ ' + r.title, {
+                    body: r.details || 'Cash Book Reminder',
+                    icon: './icon-192.png',
+                    badge: './icon-192.png',
+                    tag: 'reminder-' + r.id,
+                    requireInteraction: true,
+                    data: { reminderId: r.id }
+                });
+            } catch (swError) {
+                if (Notification.permission === 'granted') {
+                    new Notification('⏰ ' + r.title, {
+                        body: r.details || 'Cash Book Reminder',
+                        icon: './icon-192.png',
+                        tag: 'reminder-' + r.id,
+                    });
+                }
+            }
+            r.notified = true;
+            saveReminders();
+        }
 
         function scheduleAllPendingReminders() {
             // FIX: only schedule if permission already granted — never auto-prompt on app load
             if (!('Notification' in window) || Notification.permission !== 'granted') return;
-            reminders.forEach(r => { if (!isExpired(r)) scheduleNotification(r); });
+            reminders.forEach(r => { if (!isExpired(r) && !r.notified) scheduleNotification(r); });
+        }
+
+        // ==================== CATCH-UP CHECK FOR MISSED REMINDERS ====================
+        // THE CORE FIX for "reminder notification doesn't work": setTimeout only runs
+        // while this page's JS is alive. Android routinely kills closed tabs/PWAs to
+        // save battery, which wipes out every pending setTimeout with it — so a
+        // reminder set for 6 PM tomorrow will NOT fire in the background if the app
+        // isn't open at that exact moment. There is no standard web API today that can
+        // guarantee an exact-time notification while a PWA is fully closed without a
+        // server-based push backend (the experimental "Notification Triggers" API that
+        // was meant to solve this was only ever a 2019–2020 Chrome Origin Trial and was
+        // never shipped as a stable, generally available feature).
+        //
+        // The practical fix: the moment the app is opened or brought back to the
+        // foreground, immediately check for any reminder whose time has already passed
+        // but hasn't fired yet, and show it right away. This guarantees you will never
+        // silently lose a reminder — at worst it shows up late, the moment you reopen
+        // the app, instead of never at all.
+        async function checkAndFireDueReminders() {
+            if (!('Notification' in window) || Notification.permission !== 'granted') return;
+            const due = reminders.filter(r => isExpired(r) && !r.notified);
+            for (const r of due) {
+                await fireReminderNotification(r);
+            }
         }
 
         // ============================================
@@ -2608,7 +2643,8 @@ function handleURLParams() {
                 title: title.value.trim(),
                 date: date.value,
                 time: time.value,
-                details: details.value.trim()
+                details: details.value.trim(),
+                notified: false // tracks whether its notification has already fired
             };
 
             reminders.push(newReminder);
@@ -2749,6 +2785,30 @@ function handleURLParams() {
             });
         }
 
+        // FIX: also catch up whenever the app is brought back to the foreground
+        // (not just on a full reload) — e.g. switching back from another app,
+        // since Android may have paused/throttled this tab's timers in the meantime.
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                checkAndFireDueReminders();
+                scheduleAllPendingReminders();
+                renderReminders();
+            }
+        });
+
+        // ==================== BACKGROUND RELIABILITY TIP ====================
+        // Shown once on the Reminders screen until dismissed — sets honest
+        // expectations about a real platform limitation (see checkAndFireDueReminders
+        // comment above for the full explanation).
+        if (!localStorage.getItem('cashbook_bgTipDismissed')) {
+            const tip = document.getElementById('bgReliabilityTip');
+            if (tip) tip.style.display = 'block';
+        }
+        document.getElementById('dismissBgTip')?.addEventListener('click', () => {
+            document.getElementById('bgReliabilityTip').style.display = 'none';
+            localStorage.setItem('cashbook_bgTipDismissed', '1');
+        });
+
         // ==================== AMOUNT SCREEN (GHOST INPUT EDITION) ====================
         // Ghost input is invisible, fills the dark zone — tap = keyboard.
         // Display span shows the formatted amount. Sticky bar also updates live.
@@ -2872,6 +2932,11 @@ function handleURLParams() {
 
             // Schedule all pending reminders (but don't auto-request permission)
             scheduleAllPendingReminders();
+
+            // FIX: catch up on any reminder that was due while the app was closed —
+            // setTimeout can't survive the tab/PWA being killed, so this is what
+            // guarantees a reminder is never silently lost.
+            checkAndFireDueReminders();
 
             // Handle URL params (for notification click when app was closed)
             handleURLParams();
