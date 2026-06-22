@@ -42,7 +42,7 @@ body {
     font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
     background: var(--surface);
     color: var(--ink);
-    padding: 20px 16px 40px;
+    padding: calc(env(safe-area-inset-top, 0px) + 20px) 16px 40px;
     min-height: 100vh;
     overscroll-behavior-y: none;
 }
@@ -50,8 +50,11 @@ body {
 
 /* ============================================ HEADER */
 .header {
-    padding: 44px 0 18px; position: relative;
-    display: flex; align-items: center; justify-content: center;
+    padding: 78px 0 18px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 .header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
 .back-btn {
@@ -66,9 +69,15 @@ body {
 .back-btn:active { background: #EEF2F7; transform: scale(0.93); }
 
 .top-right-buttons {
-    position: fixed; top: 8px; right: 16px;
-    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; z-index: 1000;
-    max-width: 220px;
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 29px); /* 10px original + ~5mm (19px) lower, clear of camera/status bar */
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    z-index: 1000;
+    width: 100%;
 }
 .top-icon-btn {
     background: var(--card); border: none;
@@ -792,6 +801,7 @@ body.dark-mode .field-input:focus { background: #161B22; }
     background: white; color: var(--green); box-shadow: 0 2px 7px rgba(0,0,0,0.1);
 }
 #paymentOutView .mode-seg .mode-btn.active { color: var(--coral); }
+#remMainTabGroup .mode-btn[data-maintab="expired"].active { color: var(--coral); }
 body.dark-mode .mode-seg { background: #0D1117; }
 body.dark-mode .mode-seg .mode-btn.active { background: var(--card); }
 
@@ -851,6 +861,89 @@ body.dark-mode .sticky-bar { background: linear-gradient(to top, var(--paper) 55
 body.dark-mode .rmd-x { background: var(--card); color: var(--muted); }
 body.dark-mode .rmd-title { color: var(--ink); }
     </style>
+
+<script>
+window.isNativeApp = !!(window.Capacitor && window.Capacitor.Plugins);
+
+async function requestNativeNotificationPermission(){
+  try{
+    if(!window.isNativeApp || !Capacitor.Plugins.LocalNotifications) return null;
+    let perm = await Capacitor.Plugins.LocalNotifications.checkPermissions();
+    if(perm.display !== 'granted'){
+      perm = await Capacitor.Plugins.LocalNotifications.requestPermissions();
+    }
+    return perm.display === 'granted';
+  }catch(e){ return false; }
+}
+
+async function scheduleNativeReminder(reminder){
+  try{
+    if(!window.isNativeApp || !Capacitor.Plugins.LocalNotifications) return false;
+
+    const when = new Date(reminder.date + 'T' + reminder.time);
+    if(when.getTime() <= Date.now()) return false;
+
+    await Capacitor.Plugins.LocalNotifications.schedule({
+      notifications:[{
+        id: Number(reminder.id.toString().replace(/\D/g,'' ).slice(-8) || Date.now()%100000000),
+        title:'⏰ ' + reminder.title,
+        body: reminder.details || 'Cash Book Reminder',
+        schedule:{ at: when, allowWhileIdle:true },
+        extra:{ reminderId: reminder.id }
+      }]
+    });
+    return true;
+  }catch(e){ return false; }
+}
+</script>
+
+
+<script>
+window.__notifPermissionAsked = localStorage.getItem('notifPermissionAsked') === '1';
+
+async function requestNativeNotificationPermission(){
+  try{
+    if(!window.isNativeApp || !Capacitor?.Plugins?.LocalNotifications) return null;
+
+    const perm = await Capacitor.Plugins.LocalNotifications.checkPermissions();
+    if(perm.display === 'granted'){
+      localStorage.setItem('notifPermissionAsked','1');
+      localStorage.setItem('notifGranted','1');
+      return true;
+    }
+
+    if(window.__notifPermissionAsked) return false;
+
+    const req = await Capacitor.Plugins.LocalNotifications.requestPermissions();
+    localStorage.setItem('notifPermissionAsked','1');
+    if(req.display==='granted') localStorage.setItem('notifGranted','1');
+    return req.display === 'granted';
+  }catch(e){ return false; }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  try{
+    if(window.Capacitor?.Plugins?.LocalNotifications){
+      Capacitor.Plugins.LocalNotifications.addListener(
+        'localNotificationActionPerformed',
+        (event) => {
+          const reminderId = event?.notification?.extra?.reminderId;
+          if(!reminderId) return;
+
+          if(typeof showView === 'function') showView('reminderView');
+
+          setTimeout(() => {
+            if(typeof showReminderDetail === 'function'){
+              showReminderDetail(reminderId);
+            }
+          }, 500);
+        }
+      );
+    }
+  }catch(e){}
+});
+</script>
+
 </head>
 <body>
     <div class="app-container">
@@ -950,15 +1043,21 @@ body.dark-mode .rmd-title { color: var(--ink); }
                 <span id="dismissBgTip" style="position:absolute;top:8px;right:10px;cursor:pointer;font-weight:700;">✕</span>
             </div>
 
+            <div class="mode-seg" id="remMainTabGroup" style="width:100%;margin-bottom:12px;">
+                <button type="button" class="mode-btn active" data-maintab="active" style="flex:1;">🟢 Active</button>
+                <button type="button" class="mode-btn" data-maintab="expired" style="flex:1;">🔴 Expired</button>
+            </div>
+
             <div class="rem-filter-row" id="remFilterRow">
                 <button class="rfchip active" data-filter="today">Today</button>
                 <button class="rfchip" data-filter="tomorrow">Tomorrow</button>
                 <button class="rfchip" data-filter="week">This Week</button>
                 <button class="rfchip" data-filter="month">This Month</button>
+                <button class="rfchip" data-filter="year">This Year</button>
                 <button class="rfchip" data-filter="all">All</button>
             </div>
 
-            <div id="reminderList" class="txn-list" style="height: calc(100vh - 280px);"></div>
+            <div id="reminderList" class="txn-list" style="height: calc(100vh - 330px);"></div>
         </div>
 
         <!-- PAYMENT IN VIEW -->
@@ -1100,8 +1199,9 @@ body.dark-mode .rmd-title { color: var(--ink); }
                 <div class="flex-row">
                     <input type="text" id="searchInput" placeholder="🔍 Search by name or reason" style="margin-bottom:0;flex:1;" />
                     <button class="btn-secondary" id="filterBtn">Filter</button>
-                    <button class="btn-secondary" id="backupBtn">Backup</button>
-                    <button class="btn-secondary" id="restoreBtn">Restore</button>
+                    <button class="btn-secondary" id="backupBtn">Download Backup</button>
+                    <button class="btn-secondary" id="shareBackupBtn">Share Backup</button>
+                    <button class="btn-secondary" id="restoreBtn">Restore Backup</button>
                 </div>
 
                 <div id="activeFilterBadge" style="display:none;margin-bottom:0;"></div>
@@ -2165,7 +2265,88 @@ body.dark-mode .rmd-title { color: var(--ink); }
             showToast(isRealWebOrigin ? '📥 Backup downloaded' : '📥 Backup downloaded (Share needs hosting online)');
         }
 
-        async function restoreBackup() {
+        
+async function shareBackupFile() {
+    try {
+        const backupData = {
+            userName: userName,
+            transactions: transactions,
+            reminders: reminders || [],
+            backupDate: new Date().toISOString().slice(0, 10),
+            version: 2
+        };
+
+        const json = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const fileName = `CashBook_Backup_${new Date().toISOString().slice(0,10)}.json`;
+        const file = new File([blob], fileName, { type: 'application/json' });
+
+        if (window.Capacitor?.Plugins?.Share) {
+            const url = URL.createObjectURL(blob);
+            await Capacitor.Plugins.Share.share({
+                title: 'Cash Book Backup',
+                text: 'Cash Book Backup File',
+                url: url
+            });
+            return;
+        }
+
+        if (navigator.share && (!navigator.canShare || navigator.canShare({ files:[file] }))) {
+            await navigator.share({
+                title: 'Cash Book Backup',
+                files: [file]
+            });
+            return;
+        }
+
+        showToast('Share not supported on this device');
+    } catch(e) {
+        if (e?.name !== 'AbortError') showToast('Share failed');
+    }
+}
+
+
+
+async function shareBackupFile() {
+  try {
+    const backupData = {
+      userName: userName,
+      transactions: transactions,
+      reminders: reminders || [],
+      backupDate: new Date().toISOString(),
+      version: 3
+    };
+
+    const jsonData = JSON.stringify(backupData, null, 2);
+    const fileName = `CashBook_Backup_${new Date().toISOString().slice(0,10)}.json`;
+
+    if (window.Capacitor?.Plugins?.Filesystem && window.Capacitor?.Plugins?.Share) {
+      const saved = await Capacitor.Plugins.Filesystem.writeFile({
+        path: fileName,
+        data: jsonData,
+        directory: 'CACHE',
+        encoding: 'utf8'
+      });
+
+      await Capacitor.Plugins.Share.share({
+        title: 'Cash Book Backup',
+        text: 'Cash Book Backup',
+        url: saved.uri
+      });
+      return;
+    }
+
+    const blob = new Blob([jsonData], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    a.click();
+  } catch(e) {
+    showToast('Share failed');
+  }
+}
+
+async function restoreBackup() {
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = 'application/json';
@@ -2221,6 +2402,9 @@ body.dark-mode .rmd-title { color: var(--ink); }
 
         // ==================== NOTIFICATION PERMISSION ====================
         async function requestNotifPermission() {
+            const nativePerm = await requestNativeNotificationPermission();
+            if (nativePerm !== null) return nativePerm;
+
             if (!('Notification' in window)) {
                 showToast('❌ Notifications not supported');
                 return false;
@@ -2256,6 +2440,7 @@ body.dark-mode .rmd-title { color: var(--ink); }
         // ==================== REMINDER CORE ====================
         let reminders = JSON.parse(localStorage.getItem('cashbook_reminders') || '[]');
         let reminderFilter = 'today',
+            reminderMainTab = 'active',
             selectedReminderId = null;
         const _notifTimers = {};
 
@@ -2307,6 +2492,9 @@ body.dark-mode .rmd-title { color: var(--ink); }
             if (filter === 'month') {
                 return rDate.getFullYear() === today.getFullYear() && rDate.getMonth() === today.getMonth();
             }
+            if (filter === 'year') {
+                return rDate.getFullYear() === today.getFullYear();
+            }
             return true;
         }
 
@@ -2315,22 +2503,23 @@ body.dark-mode .rmd-title { color: var(--ink); }
                 reminders.sort((a, b) => {
                     const ad = new Date(a.date + 'T' + a.time);
                     const bd = new Date(b.date + 'T' + b.time);
-                    if (reminderFilter === 'all') {
-                        const now = new Date();
-                        const aExpired = ad < now;
-                        const bExpired = bd < now;
-                        if (aExpired !== bExpired) return aExpired ? 1 : -1;
-                        if (!aExpired && !bExpired) return ad - bd;
-                        return bd - ad;
+                    if (reminderMainTab === 'expired') {
+                        return bd - ad; // most recently expired first
                     }
-                    // For day/week/month filters: simple chronological order
-                    return ad - bd;
+                    return ad - bd; // active: soonest first regardless of sub-filter
                 });
             } catch (_) {}
 
             const list = document.getElementById('reminderList');
             if (!list) return;
-            const arr = reminders.filter(r => matchesReminderFilter(r, reminderFilter));
+
+            let arr;
+            if (reminderMainTab === 'expired') {
+                arr = reminders.filter(r => isExpired(r));
+            } else {
+                // Active tab: expired reminders never show here — they live in the Expired tab
+                arr = reminders.filter(r => !isExpired(r) && matchesReminderFilter(r, reminderFilter));
+            }
 
             if (!arr.length) {
                 const emptyMsgMap = {
@@ -2338,9 +2527,13 @@ body.dark-mode .rmd-title { color: var(--ink); }
                     tomorrow: '📭 No reminders tomorrow',
                     week: '📭 No reminders this week',
                     month: '📭 No reminders this month',
-                    all: '✨ No reminders yet'
+                    year: '📭 No reminders this year',
+                    all: '✨ No active reminders'
                 };
-                list.innerHTML = `<div class="empty-state">${emptyMsgMap[reminderFilter] || '📭 No reminders'}</div>`;
+                const msg = reminderMainTab === 'expired'
+                    ? '✨ No expired reminders'
+                    : (emptyMsgMap[reminderFilter] || '📭 No reminders');
+                list.innerHTML = `<div class="empty-state">${msg}</div>`;
                 return;
             }
             list.innerHTML = arr.map(r => `
@@ -2384,19 +2577,17 @@ body.dark-mode .rmd-title { color: var(--ink); }
         // ===== UPDATED scheduleNotification with Service Worker messaging =====
         async function scheduleNotification(r) {
           if (isExpired(r)) return;
-          if (r.notified) return; // already fired — don't double-schedule
-          const granted = await requestNotifPermission();
-          if (!granted) return;
 
+          if (window.isNativeApp && window.Capacitor?.Plugins?.LocalNotifications) {
+            scheduleNativeReminder(r);
+            return;
+          }
+
+          if (r.notified) return;
           const delay = new Date(r.date + 'T' + r.time).getTime() - Date.now();
-          if (delay <= 0) return;
-
-          // FIX: setTimeout max is ~24.8 days (2^31-1 ms); longer reminders silently fail
-          // We skip scheduling now; scheduleAllPendingReminders runs on each app open
-          if (delay > 2147483647) return;
+          if (delay <= 0 || delay > 2147483647) return;
 
           if (_notifTimers[r.id]) clearTimeout(_notifTimers[r.id]);
-
           _notifTimers[r.id] = setTimeout(async () => {
             await fireReminderNotification(r);
           }, delay);
@@ -2541,6 +2732,7 @@ function handleURLParams() {
         document.getElementById('searchInput')?.addEventListener('input', () => renderDetailsView());
         document.getElementById('backupBtn')?.addEventListener('click', backupAllData);
         document.getElementById('restoreBtn')?.addEventListener('click', restoreBackup);
+        document.getElementById('shareBackupBtn')?.addEventListener('click', shareBackupFile);
         document.getElementById('shareBtn')?.addEventListener('click', shareApp);
         document.getElementById('rateUsBtn')?.addEventListener('click', rateUs);
         document.getElementById('langTopBtn')?.addEventListener('click', () => {
@@ -2585,6 +2777,11 @@ function handleURLParams() {
                 return;
             }
 
+            if(localStorage.getItem('notifGranted')==='1'){
+                renderReminders();
+                showView('reminderView');
+                return;
+            }
             showNotificationBanner();
         });
 
@@ -2665,6 +2862,18 @@ function handleURLParams() {
                 document.querySelectorAll('.rfchip').forEach(c => c.classList.remove('active'));
                 chip.classList.add('active');
                 reminderFilter = chip.dataset.filter;
+                renderReminders();
+            });
+        });
+
+        document.querySelectorAll('#remMainTabGroup .mode-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#remMainTabGroup .mode-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                reminderMainTab = btn.dataset.maintab;
+                // Date sub-filters (Today/Tomorrow/etc.) only make sense for Active Reminders
+                const filterRow = document.getElementById('remFilterRow');
+                if (filterRow) filterRow.style.display = (reminderMainTab === 'active') ? 'flex' : 'none';
                 renderReminders();
             });
         });
@@ -2953,5 +3162,49 @@ function handleURLParams() {
         initApp();
 
     </script>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    // FIX: it was `window.Capacitor?.App` which is always undefined —
+    // Capacitor 3+ exposes plugins via Capacitor.Plugins.X, not Capacitor.X.
+    // That's why the listener never registered and hardware back did nothing.
+    const AppPlugin = window.Capacitor?.Plugins?.App;
+    if (AppPlugin) {
+      AppPlugin.addListener('backButton', () => {
+        // 1. If any modal/popup is open, close that first instead of navigating
+        const modalIds = ['transactionModal', 'filterModal', 'editNameModal',
+                           'reminderModal', 'reminderDetailModal', 'confirmModal'];
+        for (const id of modalIds) {
+          const el = document.getElementById(id);
+          if (el && el.style.display !== 'none' && el.style.display !== '') {
+            el.style.display = 'none';
+            return;
+          }
+        }
+        const overlay = document.getElementById('overlay');
+        const successPopup = document.getElementById('successPopup');
+        if (overlay && overlay.style.display === 'block') {
+          overlay.style.display = 'none';
+          if (successPopup) successPopup.style.display = 'none';
+          return;
+        }
+
+        // 2. Otherwise behave like the on-screen back button (go up the nav stack)
+        const backBtn = document.getElementById('backBtn');
+        if (backBtn && backBtn.style.display !== 'none') {
+          backBtn.click();
+          return;
+        }
+
+        // 3. At the root (dashboard/lang/name) with nowhere left to go — exit app,
+        // matching standard Android back-button behavior instead of doing nothing.
+        AppPlugin.exitApp();
+      });
+    }
+  } catch(e) {}
+});
+</script>
+
 </body>
 </html>
